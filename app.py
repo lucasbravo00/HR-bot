@@ -13,6 +13,13 @@ from core.scoring import STATUS_LABELS, score_candidate
 st.set_page_config(page_title="People Ops Copilot", page_icon="🧭", layout="wide")
 db.init_db()
 
+# Streamlit forbids writing to a widget's session_state key after that widget has
+# been instantiated in the same run. Selecting a job after creating/deleting one
+# therefore goes through this pending key, resolved before the job_choice radio
+# (in render_sidebar) is created.
+if "pending_job_choice" in st.session_state:
+    st.session_state["job_choice"] = st.session_state.pop("pending_job_choice")
+
 CATEGORIES = ["technical", "soft", "language", "other"]
 
 ENGINE_LABELS = {
@@ -74,7 +81,7 @@ def render_new_job(provider: LLMProvider) -> None:
 
         job_title = title.strip() or rubric.job_title
         job_id = db.create_job(job_title, jd_text, rubric.model_dump_json())
-        st.session_state["job_choice"] = f"{job_title} (#{job_id})"
+        st.session_state["pending_job_choice"] = f"{job_title} (#{job_id})"
         st.rerun()
 
 
@@ -261,5 +268,5 @@ else:
             st.divider()
             if st.button("🗑️ Delete this job"):
                 db.delete_job(job["id"])
-                st.session_state["job_choice"] = NEW_JOB_OPTION
+                st.session_state["pending_job_choice"] = NEW_JOB_OPTION
                 st.rerun()
