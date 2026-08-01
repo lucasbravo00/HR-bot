@@ -1,7 +1,7 @@
-"""Fachada de proveedores de LLM.
+"""LLM provider facade.
 
-La UI pide un proveedor por nombre y trabaja contra la interfaz común
-(`LLMProvider`); los detalles de cada motor viven en `core/providers/`.
+The UI requests a provider by name and works against the common interface
+(`LLMProvider`); engine-specific details live in `core/providers/`.
 """
 
 from .providers.base import LLMError, LLMProvider
@@ -17,4 +17,4 @@ def get_provider(name: str = "claude", ollama_model: str = OLLAMA_DEFAULT_MODEL)
         return ClaudeProvider()
     if name == "ollama":
         return OllamaProvider(model=ollama_model)
-    raise ValueError(f"Proveedor desconocido: {name}")
+    raise ValueError(f"Unknown provider: {name}")

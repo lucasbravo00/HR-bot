@@ -1,7 +1,7 @@
-"""Proveedor Claude (API de Anthropic).
+"""Claude provider (Anthropic API).
 
-Usa salidas estructuradas (`messages.parse` + Pydantic), PDFs nativos como bloque
-`document` y prompt caching sobre el contexto compartido de la búsqueda.
+Uses structured outputs (`messages.parse` + Pydantic), native PDF ingestion via
+`document` blocks, and prompt caching on the per-job shared context.
 """
 
 import base64
@@ -22,13 +22,13 @@ def _translate_errors():
     try:
         yield
     except anthropic.RateLimitError:
-        raise LLMError("Límite de uso de la API de Anthropic alcanzado. Esperá un momento y reintentá.")
+        raise LLMError("Anthropic API rate limit reached. Wait a moment and retry.")
     except anthropic.APIStatusError as e:
-        raise LLMError(f"Error de la API de Anthropic ({e.status_code}): {e.message}")
+        raise LLMError(f"Anthropic API error ({e.status_code}): {e.message}")
     except anthropic.APIConnectionError:
-        raise LLMError("No se pudo conectar con la API de Anthropic. Revisá tu conexión.")
+        raise LLMError("Could not reach the Anthropic API. Check your connection.")
     except anthropic.AnthropicError as e:
-        raise LLMError(f"Error de configuración de Anthropic: {e}. ¿Está definida ANTHROPIC_API_KEY?")
+        raise LLMError(f"Anthropic configuration error: {e}. Is ANTHROPIC_API_KEY set?")
 
 
 class ClaudeProvider:
@@ -38,7 +38,7 @@ class ClaudeProvider:
         self.model = model
 
     def _client(self) -> anthropic.Anthropic:
-        # Instanciación diferida: la app puede arrancar sin credenciales configuradas.
+        # Lazy instantiation: the app can boot without credentials configured.
         return anthropic.Anthropic()
 
     def extract_rubric(self, jd_text: str) -> Rubric:
@@ -48,7 +48,7 @@ class ClaudeProvider:
                 max_tokens=MAX_TOKENS,
                 thinking={"type": "adaptive"},
                 system=RUBRIC_SYSTEM,
-                messages=[{"role": "user", "content": f"Descripción del puesto:\n\n{jd_text}"}],
+                messages=[{"role": "user", "content": f"Job description:\n\n{jd_text}"}],
                 output_format=Rubric,
             )
         return response.parsed_output
@@ -64,9 +64,8 @@ class ClaudeProvider:
         system = [
             {"type": "text", "text": EVAL_INSTRUCTIONS},
             {
-                # Bloque compartido entre todos los candidatos de una misma búsqueda:
-                # con cache_control el prefijo se cachea y las evaluaciones siguientes
-                # son más rápidas y baratas.
+                # Shared across every candidate of the same job: with cache_control
+                # the prefix is cached, making subsequent evaluations faster and cheaper.
                 "type": "text",
                 "text": job_context(jd_text, rubric.model_dump_json(indent=2)),
                 "cache_control": {"type": "ephemeral"},
@@ -83,13 +82,13 @@ class ClaudeProvider:
                         "data": base64.standard_b64encode(cv_pdf).decode("utf-8"),
                     },
                 },
-                {"type": "text", "text": f"Evaluá este CV (archivo: {filename}) contra la rúbrica."},
+                {"type": "text", "text": f"Evaluate this resume (file: {filename}) against the rubric."},
             ]
         else:
             content = [
                 {
                     "type": "text",
-                    "text": f"CV (archivo: {filename}):\n\n{cv_text}\n\nEvaluá este CV contra la rúbrica.",
+                    "text": f"Resume (file: {filename}):\n\n{cv_text}\n\nEvaluate this resume against the rubric.",
                 }
             ]
 

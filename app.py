@@ -1,4 +1,4 @@
-"""People Ops Copilot — MVP 1: núcleo de recruiting con evaluación basada en evidencia."""
+"""People Ops Copilot — MVP 1: recruiting core with evidence-based evaluation."""
 
 import json
 
@@ -13,58 +13,60 @@ from core.scoring import STATUS_LABELS, score_candidate
 st.set_page_config(page_title="People Ops Copilot", page_icon="🧭", layout="wide")
 db.init_db()
 
-CATEGORIES = ["tecnica", "blanda", "idioma", "otra"]
+CATEGORIES = ["technical", "soft", "language", "other"]
 
 ENGINE_LABELS = {
     "Claude (Anthropic)": "claude",
-    "Ollama (modelo local, open source)": "ollama",
+    "Ollama (local, open source)": "ollama",
 }
+
+NEW_JOB_OPTION = "➕ New job"
 
 
 # ---------------------------------------------------------------- sidebar
 
 def render_sidebar() -> tuple[str, LLMProvider]:
     st.sidebar.title("🧭 People Ops Copilot")
-    st.sidebar.caption("Asistente de selección con evaluación basada en evidencia")
+    st.sidebar.caption("Recruiting assistant with evidence-based evaluation")
 
     jobs = db.list_jobs()
     job_labels = {f"{j['title']} (#{j['id']})": j["id"] for j in jobs}
-    options = ["➕ Nueva búsqueda"] + list(job_labels)
-    choice = st.sidebar.radio("Búsquedas", options, key="job_choice")
+    options = [NEW_JOB_OPTION] + list(job_labels)
+    choice = st.sidebar.radio("Jobs", options, key="job_choice")
 
     st.sidebar.divider()
-    engine_label = st.sidebar.selectbox("Motor de IA", list(ENGINE_LABELS), key="engine")
+    engine_label = st.sidebar.selectbox("AI engine", list(ENGINE_LABELS), key="engine")
     engine = ENGINE_LABELS[engine_label]
     if engine == "ollama":
-        ollama_model = st.sidebar.text_input("Modelo de Ollama", value=OLLAMA_DEFAULT_MODEL, key="ollama_model")
+        ollama_model = st.sidebar.text_input("Ollama model", value=OLLAMA_DEFAULT_MODEL, key="ollama_model")
         st.sidebar.caption(
-            "Los CVs no salen de tu máquina 🔒. Requiere [Ollama](https://ollama.com) corriendo "
-            f"y el modelo descargado (`ollama pull {ollama_model or OLLAMA_DEFAULT_MODEL}`). "
-            "Los modelos locales chicos son menos precisos juzgando evidencia que Claude."
+            "Resumes never leave your machine 🔒. Requires [Ollama](https://ollama.com) running "
+            f"and the model downloaded (`ollama pull {ollama_model or OLLAMA_DEFAULT_MODEL}`). "
+            "Small local models are less accurate at judging evidence than Claude."
         )
         provider = get_provider("ollama", ollama_model=ollama_model or OLLAMA_DEFAULT_MODEL)
     else:
-        st.sidebar.caption("Requiere `ANTHROPIC_API_KEY`. Mayor calidad de evaluación y lectura nativa de PDFs.")
+        st.sidebar.caption("Requires `ANTHROPIC_API_KEY`. Best evaluation quality and native PDF reading.")
         provider = get_provider("claude")
 
     st.session_state["job_labels"] = job_labels
     return choice, provider
 
 
-# ---------------------------------------------------------------- nueva búsqueda
+# ---------------------------------------------------------------- new job
 
 def render_new_job(provider: LLMProvider) -> None:
-    st.header("Nueva búsqueda")
+    st.header("New job")
     st.markdown(
-        "Pegá la descripción del puesto. La IA propone una **rúbrica de competencias** "
-        "que después podés editar antes de evaluar candidatos."
+        "Paste the job description. The AI proposes a **competency rubric** "
+        "you can edit before evaluating candidates."
     )
-    title = st.text_input("Nombre de la búsqueda (opcional, se infiere del puesto)")
-    jd_text = st.text_area("Descripción del puesto", height=350, placeholder="Pegá acá la job description…")
+    title = st.text_input("Job name (optional, inferred from the description)")
+    jd_text = st.text_area("Job description", height=350, placeholder="Paste the job description here…")
 
-    if st.button("✨ Extraer rúbrica con IA", type="primary", disabled=not jd_text.strip()):
+    if st.button("✨ Extract rubric with AI", type="primary", disabled=not jd_text.strip()):
         try:
-            with st.spinner("Analizando la descripción del puesto…"):
+            with st.spinner("Analyzing the job description…"):
                 rubric = provider.extract_rubric(jd_text)
         except LLMError as e:
             st.error(str(e))
@@ -76,18 +78,18 @@ def render_new_job(provider: LLMProvider) -> None:
         st.rerun()
 
 
-# ---------------------------------------------------------------- rúbrica
+# ---------------------------------------------------------------- rubric
 
 def render_rubric_tab(job) -> Rubric:
     rubric = Rubric.model_validate_json(job["rubric_json"])
 
-    with st.expander("Ver descripción del puesto"):
+    with st.expander("View job description"):
         st.text(job["jd_text"])
 
     st.markdown(
-        "La rúbrica es **editable**: ajustá pesos, marcá excluyentes o agregá competencias. "
-        "El puntaje de cada candidato se calcula en código a partir de estos pesos — "
-        "el modelo solo juzga la evidencia."
+        "The rubric is **editable**: adjust weights, mark must-haves or add competencies. "
+        "Each candidate's score is computed in code from these weights — "
+        "the model only judges evidence."
     )
 
     df = pd.DataFrame([c.model_dump() for c in rubric.competencies])
@@ -96,16 +98,16 @@ def render_rubric_tab(job) -> Rubric:
         num_rows="dynamic",
         width="stretch",
         column_config={
-            "name": st.column_config.TextColumn("Competencia", required=True),
-            "category": st.column_config.SelectboxColumn("Tipo", options=CATEGORIES, required=True),
-            "weight": st.column_config.NumberColumn("Peso (1-5)", min_value=1, max_value=5, step=1),
-            "must_have": st.column_config.CheckboxColumn("Excluyente"),
-            "evidence_criteria": st.column_config.TextColumn("Criterio de evidencia", width="large"),
+            "name": st.column_config.TextColumn("Competency", required=True),
+            "category": st.column_config.SelectboxColumn("Type", options=CATEGORIES, required=True),
+            "weight": st.column_config.NumberColumn("Weight (1-5)", min_value=1, max_value=5, step=1),
+            "must_have": st.column_config.CheckboxColumn("Must-have"),
+            "evidence_criteria": st.column_config.TextColumn("Evidence criterion", width="large"),
         },
         key=f"rubric_editor_{job['id']}",
     )
 
-    if st.button("💾 Guardar rúbrica"):
+    if st.button("💾 Save rubric"):
         comps = []
         for row in edited.to_dict("records"):
             name = str(row.get("name") or "").strip()
@@ -114,34 +116,34 @@ def render_rubric_tab(job) -> Rubric:
             comps.append(
                 Competency(
                     name=name,
-                    category=row.get("category") or "otra",
+                    category=row.get("category") or "other",
                     weight=int(row.get("weight") or 3),
                     must_have=bool(row.get("must_have")),
                     evidence_criteria=str(row.get("evidence_criteria") or "").strip(),
                 )
             )
         if not comps:
-            st.warning("La rúbrica necesita al menos una competencia.")
+            st.warning("The rubric needs at least one competency.")
         else:
             db.update_rubric(job["id"], Rubric(job_title=rubric.job_title, competencies=comps).model_dump_json())
-            st.success("Rúbrica guardada. Las próximas evaluaciones la usarán.")
+            st.success("Rubric saved. Upcoming evaluations will use it.")
             st.rerun()
 
     return rubric
 
 
-# ---------------------------------------------------------------- candidatos
+# ---------------------------------------------------------------- candidates
 
 def evaluate_files(job, rubric: Rubric, files, provider: LLMProvider) -> None:
     existing = db.candidate_filenames(job["id"])
     progress = st.progress(0.0)
     for i, f in enumerate(files):
         if f.name in existing:
-            st.info(f"⏭️ {f.name}: ya fue evaluado para esta búsqueda, se omite.")
+            st.info(f"⏭️ {f.name}: already evaluated for this job, skipping.")
             progress.progress((i + 1) / len(files))
             continue
         try:
-            with st.spinner(f"Evaluando {f.name} con {provider.name}…"):
+            with st.spinner(f"Evaluating {f.name} with {provider.name}…"):
                 if f.name.lower().endswith(".pdf"):
                     evaluation = provider.evaluate_cv(job["jd_text"], rubric, f.name, cv_pdf=f.getvalue())
                 else:
@@ -171,52 +173,52 @@ def render_candidate_detail(row, rubric: Rubric) -> None:
     comp_by_name = {c.name.casefold().strip(): c for c in rubric.competencies}
 
     if missing:
-        st.error("⚠️ Sin evidencia de requisitos excluyentes: " + ", ".join(missing))
-    st.markdown(f"**Resumen para el recruiter:**\n\n{evaluation.summary}")
+        st.error("⚠️ No evidence for must-have requirements: " + ", ".join(missing))
+    st.markdown(f"**Recruiter summary:**\n\n{evaluation.summary}")
     st.divider()
 
     for ev in evaluation.evaluations:
         comp = comp_by_name.get(ev.competency_name.casefold().strip())
-        weight_txt = f" · peso {comp.weight}" + (" · excluyente" if comp.must_have else "") if comp else ""
+        weight_txt = f" · weight {comp.weight}" + (" · must-have" if comp.must_have else "") if comp else ""
         st.markdown(f"**{ev.competency_name}**{weight_txt} — {STATUS_LABELS[ev.status]}")
         for quote in ev.evidence_quotes:
             st.markdown(f"> {quote}")
         st.caption(ev.reasoning)
 
-    if st.button("🗑️ Eliminar candidato", key=f"del_{row['id']}"):
+    if st.button("🗑️ Delete candidate", key=f"del_{row['id']}"):
         db.delete_candidate(row["id"])
         st.rerun()
 
 
 def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
     st.markdown(
-        "Subí CVs en PDF o texto plano. Cada candidato se evalúa **de forma independiente** "
-        "contra la rúbrica; el puntaje es una suma ponderada calculada en código."
+        "Upload resumes as PDF or plain text. Each candidate is evaluated **independently** "
+        "against the rubric; the score is a weighted sum computed in code."
     )
     files = st.file_uploader(
-        "CVs de candidatos", type=["pdf", "txt", "md"], accept_multiple_files=True,
+        "Candidate resumes", type=["pdf", "txt", "md"], accept_multiple_files=True,
         key=f"uploader_{job['id']}",
     )
-    if files and st.button(f"🔍 Evaluar {len(files)} candidato(s)", type="primary"):
+    if files and st.button(f"🔍 Evaluate {len(files)} candidate(s)", type="primary"):
         evaluate_files(job, rubric, files, provider)
 
     candidates = db.list_candidates(job["id"])
     if not candidates:
-        st.info("Todavía no hay candidatos evaluados para esta búsqueda.")
+        st.info("No candidates evaluated for this job yet.")
         return
 
     st.subheader("🏆 Ranking")
     st.caption(
-        "El puntaje refleja cuánta evidencia hay en el CV para la rúbrica — "
-        "«sin evidencia» significa que el CV no lo menciona, no que el candidato no lo tenga."
+        "The score reflects how much evidence the resume contains for the rubric — "
+        "“no evidence” means the resume doesn't mention it, not that the candidate lacks it."
     )
     ranking = pd.DataFrame(
         [
             {
-                "Candidato": r["name"],
-                "Archivo": r["filename"],
+                "Candidate": r["name"],
+                "File": r["filename"],
                 "Match": r["score"],
-                "Excluyentes sin evidencia": ", ".join(json.loads(r["missing_must_haves_json"])) or "—",
+                "Must-haves without evidence": ", ".join(json.loads(r["missing_must_haves_json"])) or "—",
             }
             for r in candidates
         ]
@@ -230,7 +232,7 @@ def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
         },
     )
 
-    st.subheader("📄 Informes por candidato")
+    st.subheader("📄 Candidate reports")
     for row in candidates:
         flag = " ⚠️" if json.loads(row["missing_must_haves_json"]) else ""
         with st.expander(f"{row['name']} — {row['score']:.1f}%{flag}"):
@@ -241,15 +243,15 @@ def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
 
 choice, provider = render_sidebar()
 
-if choice == "➕ Nueva búsqueda":
+if choice == NEW_JOB_OPTION:
     render_new_job(provider)
 else:
     job = db.get_job(st.session_state["job_labels"][choice])
     if job is None:
-        st.error("La búsqueda seleccionada ya no existe.")
+        st.error("The selected job no longer exists.")
     else:
         st.header(job["title"])
-        tab_rubric, tab_candidates = st.tabs(["📋 Rúbrica", "👥 Candidatos"])
+        tab_rubric, tab_candidates = st.tabs(["📋 Rubric", "👥 Candidates"])
         with tab_rubric:
             rubric = render_rubric_tab(job)
         with tab_candidates:
@@ -257,7 +259,7 @@ else:
 
         with st.sidebar:
             st.divider()
-            if st.button("🗑️ Eliminar esta búsqueda"):
+            if st.button("🗑️ Delete this job"):
                 db.delete_job(job["id"])
-                st.session_state["job_choice"] = "➕ Nueva búsqueda"
+                st.session_state["job_choice"] = NEW_JOB_OPTION
                 st.rerun()

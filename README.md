@@ -1,58 +1,58 @@
 # 🧭 People Ops Copilot
 
-Asistente de IA para procesos de selección, diseñado como **soporte a la decisión** del
-recruiter — no como decisor automático. Toda recomendación del modelo viene justificada
-con evidencia citada textualmente del CV, y el puntaje final se calcula en código de
-forma determinística y auditable.
+An AI recruiting assistant designed as **decision support** for the recruiter — not as an
+automated decision-maker. Every model recommendation is backed by evidence quoted
+verbatim from the resume, and the final score is computed in code, deterministically
+and auditably.
 
-## Cómo funciona (MVP 1 — núcleo de recruiting)
+## How it works (MVP 1 — recruiting core)
 
-1. **Descripción del puesto → rúbrica.** La IA extrae una rúbrica de competencias
-   (técnicas, blandas, idiomas) con pesos, criterios de evidencia y requisitos
-   excluyentes — al estilo de una entrevista estructurada. El recruiter la **edita**
-   antes de evaluar: la rúbrica es del humano, no del modelo.
-2. **CV → evaluación con evidencia.** Cada CV (PDF o texto) se evalúa de forma
-   **independiente** contra la rúbrica. Por competencia, el modelo devuelve uno de tres
-   estados — *evidencia encontrada*, *evidencia parcial* o *sin evidencia* — junto con
-   **citas textuales** del CV y una justificación breve. «Sin evidencia» significa que el
-   CV no lo menciona, no que el candidato carezca de la competencia.
-3. **Ranking calculado en código.** El puntaje es una suma ponderada determinística de
-   los juicios por competencia (`core/scoring.py`). El LLM nunca genera el número: juzga
-   evidencia; la aritmética es reproducible y auditable.
+1. **Job description → rubric.** The AI extracts a competency rubric (technical, soft
+   skills, languages) with weights, evidence criteria and must-have requirements — in
+   the style of a structured interview. The recruiter **edits it** before evaluating:
+   the rubric belongs to the human, not the model.
+2. **Resume → evidence-based evaluation.** Each resume (PDF or text) is evaluated
+   **independently** against the rubric. Per competency, the model returns one of three
+   states — *evidence found*, *partial evidence* or *no evidence* — along with
+   **verbatim quotes** from the resume and a brief justification. "No evidence" means
+   the resume doesn't mention it, not that the candidate lacks the competency.
+3. **Ranking computed in code.** The score is a deterministic weighted sum of the
+   per-competency judgments (`core/scoring.py`). The LLM never generates the number:
+   it judges evidence; the arithmetic is reproducible and auditable.
 
-### Decisiones de diseño responsable
+### Responsible-design decisions
 
-- **Human-in-the-loop**: la herramienta informa, el recruiter decide. La rúbrica es
-  editable y cada informe expone el razonamiento completo para revisión.
-- **Sin números mágicos**: no se le pide al modelo un "% de match" (los LLMs generan
-  precisión aparente sin sustento). El score sale de pesos definidos por el recruiter.
-- **Evaluación independiente**: cada candidato se juzga contra la rúbrica, nunca
-  comparándolo con otros (evita efectos de orden).
-- **Datos sintéticos**: los CVs de `sample_data/` son ficticios. Nunca subas CVs reales
-  a un repositorio.
+- **Human-in-the-loop**: the tool informs, the recruiter decides. The rubric is
+  editable and every report exposes the full reasoning for review.
+- **No magic numbers**: the model is never asked for a "% match" (LLMs produce
+  apparent precision without substance). The score comes from recruiter-defined weights.
+- **Independent evaluation**: each candidate is judged against the rubric, never
+  compared with other candidates (avoids ordering effects).
+- **Synthetic data**: the resumes in `sample_data/` are fictional. Never push real
+  resumes to a repository.
 
-El marco regulatorio va en esta dirección: el EU AI Act clasifica los sistemas de IA
-para reclutamiento como de alto riesgo, y normas como la Local Law 144 de NYC exigen
-auditorías de herramientas automatizadas de selección.
+Regulation is moving in this direction: the EU AI Act classifies AI systems for
+recruitment as high-risk, and rules like NYC Local Law 144 require audits of automated
+hiring tools.
 
-## Motores de IA: nube u open source local
+## AI engines: cloud or local open source
 
-La capa de LLM está abstraída detrás de una interfaz común (`core/providers/`), con dos
-motores intercambiables desde la barra lateral:
+The LLM layer is abstracted behind a common interface (`core/providers/`), with two
+engines switchable from the sidebar:
 
 | | **Claude (Anthropic)** | **Ollama (local, open source)** |
 |---|---|---|
-| Privacidad | Los CVs viajan a la API | 🔒 Los CVs nunca salen de tu máquina |
-| Costo | Pago por token | Gratis (corre en tu hardware) |
-| Calidad del juicio de evidencia | Alta | Depende del modelo (Llama 3.1 8B es notablemente menos preciso) |
-| PDFs | Lectura nativa de documentos | Extracción de texto local (`pypdf`); no lee escaneos |
-| Salida estructurada | Garantizada por la API | Decoding restringido de Ollama + validación Pydantic con reintento |
+| Privacy | Resumes travel to the API | 🔒 Resumes never leave your machine |
+| Cost | Pay per token | Free (runs on your hardware) |
+| Evidence-judgment quality | High | Model-dependent (Llama 3.1 8B is noticeably less precise) |
+| PDFs | Native document reading | Local text extraction (`pypdf`); can't read scans |
+| Structured output | Guaranteed by the API | Ollama constrained decoding + Pydantic validation with retry |
 
-Para RRHH la opción local importa: los CVs son datos personales sensibles, y poder
-procesar todo on-premise es un requisito real en muchas organizaciones. El diseño
-mitiga la menor calidad del modelo local: la rúbrica siempre es editable por el
-recruiter, y el puntaje se calcula en código — el modelo local solo aporta los juicios
-de evidencia, que el informe expone con citas para revisión humana.
+The local option matters for HR: resumes are sensitive personal data, and being able to
+process everything on-premise is a real requirement in many organizations. The design
+mitigates the local model's lower quality: the rubric is always recruiter-editable, and
+the score is computed in code — the local model only contributes evidence judgments,
+which the report exposes with quotes for human review.
 
 ## Setup
 
@@ -60,48 +60,51 @@ de evidencia, que el informe expone con citas para revisión humana.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# Opción A — Claude (recomendado por calidad):
-export ANTHROPIC_API_KEY="tu-api-key"   # o autenticate con `ant auth login`
+# Option A — Claude (recommended for quality):
+export ANTHROPIC_API_KEY="your-api-key"   # or authenticate with `ant auth login`
 
-# Opción B — modelo local open source (sin API key):
-#   1. Instalá Ollama: https://ollama.com
+# Option B — local open-source model (no API key):
+#   1. Install Ollama: https://ollama.com
 #   2. ollama pull llama3.1
 
 .venv/bin/streamlit run app.py
 ```
 
-Para probar rápido: creá una búsqueda pegando `sample_data/puesto_customer_success.txt`
-y subí los tres CVs sintéticos de `sample_data/`.
+For a quick tour: create a job by pasting `sample_data/job_customer_success.txt` and
+upload the three synthetic resumes from `sample_data/` (strong, medium and weak fit).
+
+Job descriptions in any language work: the prompts instruct the model to write the
+rubric and reports in the language of the job description.
 
 ## Stack
 
-- **Python + Anthropic API** (`claude-opus-4-8`) con salidas estructuradas
-  (`messages.parse` + Pydantic), prompt caching sobre el contexto de la búsqueda y
-  lectura nativa de PDFs.
-- **Ollama** como motor alternativo open source local (Llama 3.1 por defecto,
-  configurable), con salida estructurada vía JSON Schema.
-- **Streamlit** para la UI, **SQLite** para persistencia.
+- **Python + Anthropic API** (`claude-opus-4-8`) with structured outputs
+  (`messages.parse` + Pydantic), prompt caching on the per-job context, and native
+  PDF reading.
+- **Ollama** as the alternative local open-source engine (Llama 3.1 by default,
+  configurable), with structured output via JSON Schema.
+- **Streamlit** for the UI, **SQLite** for persistence.
 
-## Estructura
+## Project layout
 
 ```
-app.py                    # UI Streamlit (selector de motor incluido)
-core/models.py            # Esquemas Pydantic (rúbrica, evaluaciones)
-core/prompts.py           # Prompts compartidos entre motores
-core/llm.py               # Fachada de proveedores
-core/providers/base.py    # Interfaz común (LLMProvider) y LLMError
-core/providers/claude.py  # Motor Claude (API de Anthropic)
-core/providers/ollama.py  # Motor local open source (Ollama)
-core/scoring.py           # Puntaje determinístico + detección de excluyentes faltantes
-core/db.py                # Persistencia SQLite
-sample_data/              # JD y CVs sintéticos de demo
+app.py                    # Streamlit UI (engine selector included)
+core/models.py            # Pydantic schemas (rubric, evaluations)
+core/prompts.py           # Prompts shared across engines
+core/llm.py               # Provider facade
+core/providers/base.py    # Common interface (LLMProvider) and LLMError
+core/providers/claude.py  # Claude engine (Anthropic API)
+core/providers/ollama.py  # Local open-source engine (Ollama)
+core/scoring.py           # Deterministic scoring + missing must-have detection
+core/db.py                # SQLite persistence
+sample_data/              # Synthetic demo job description and resumes
 ```
 
 ## Roadmap
 
-- **MVP 2**: screening ciego (anonimización de CVs antes de evaluar), preguntas de
-  entrevista conductuales (STAR) generadas a partir de los gaps detectados, resumen
-  ejecutivo pre-entrevista, emails de invitación/rechazo/seguimiento, log de decisiones
-  del recruiter, chequeo de consistencia test-retest de las evaluaciones.
-- **MVP 3 (People Ops Copilot)**: generador de descripciones de puesto, matrices de
-  competencias, planes de onboarding y desarrollo — como módulos sobre la misma base.
+- **MVP 2**: blind screening (resume anonymization before evaluation), behavioral
+  (STAR) interview questions generated from detected gaps, pre-interview executive
+  summary, invitation/rejection/follow-up emails, recruiter decision log, test-retest
+  consistency checks of evaluations.
+- **MVP 3 (People Ops Copilot)**: job description generator, competency matrices,
+  onboarding and development plans — as modules on the same foundation.

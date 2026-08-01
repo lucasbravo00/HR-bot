@@ -1,10 +1,9 @@
-"""Proveedor Ollama: modelos open source corriendo en tu máquina (Llama 3.1, etc.).
+"""Ollama provider: open-source models running on your own machine (Llama 3.1, etc.).
 
-Los CVs nunca salen de tu computadora — argumento fuerte de privacidad para datos
-sensibles como CVs. Trade-offs frente a Claude: hay que extraer el texto de los PDFs
-localmente (sin lectura nativa de documentos), y la salida estructurada depende del
-decoding restringido de Ollama (`format` = JSON Schema) más una validación Pydantic
-con reintento.
+Resumes never leave your computer — a strong privacy argument for data as sensitive
+as CVs. Trade-offs vs. Claude: PDF text must be extracted locally (no native document
+reading), and structured output relies on Ollama's constrained decoding
+(`format` = JSON Schema) plus Pydantic validation with one retry.
 """
 
 import io
@@ -21,7 +20,7 @@ from .base import LLMError
 DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1")
 
-# Los CVs + rúbrica no entran en el num_ctx default de Ollama (4096).
+# Resumes + rubric do not fit in Ollama's default num_ctx (4096).
 NUM_CTX = 16384
 TIMEOUT_S = 600
 
@@ -33,9 +32,9 @@ def _pdf_to_text(pdf_bytes: bytes) -> str:
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     if not text.strip():
         raise LLMError(
-            "El PDF no contiene texto extraíble (¿es un escaneo/imagen?). "
-            "Con Ollama solo se pueden evaluar PDFs con texto; probá con el motor Claude, "
-            "que lee documentos de forma nativa."
+            "The PDF contains no extractable text (is it a scan/image?). "
+            "Ollama can only evaluate PDFs with embedded text; try the Claude engine, "
+            "which reads documents natively."
         )
     return text
 
@@ -60,27 +59,27 @@ class OllamaProvider:
         }
 
         last_error = None
-        for _ in range(2):  # un reintento si el modelo devuelve JSON inválido
+        for _ in range(2):  # one retry if the model returns invalid JSON
             try:
                 r = requests.post(f"{self.host}/api/chat", json=payload, timeout=TIMEOUT_S)
             except requests.exceptions.ConnectionError:
                 raise LLMError(
-                    f"No se pudo conectar con Ollama en {self.host}. "
-                    "¿Está corriendo? Iniciálo con `ollama serve` (o abriendo la app de Ollama)."
+                    f"Could not connect to Ollama at {self.host}. "
+                    "Is it running? Start it with `ollama serve` (or by opening the Ollama app)."
                 )
             except requests.exceptions.Timeout:
                 raise LLMError(
-                    f"Ollama tardó más de {TIMEOUT_S}s en responder. "
-                    "Probá con un modelo más chico o revisá la carga de tu máquina."
+                    f"Ollama took longer than {TIMEOUT_S}s to respond. "
+                    "Try a smaller model or check your machine's load."
                 )
 
             if r.status_code == 404:
                 raise LLMError(
-                    f"El modelo `{self.model}` no está descargado en Ollama. "
-                    f"Descargalo con: `ollama pull {self.model}`"
+                    f"Model `{self.model}` is not available in Ollama. "
+                    f"Download it with: `ollama pull {self.model}`"
                 )
             if r.status_code != 200:
-                raise LLMError(f"Error de Ollama ({r.status_code}): {r.text[:300]}")
+                raise LLMError(f"Ollama error ({r.status_code}): {r.text[:300]}")
 
             content = r.json().get("message", {}).get("content", "")
             try:
@@ -90,22 +89,22 @@ class OllamaProvider:
                 continue
 
         raise LLMError(
-            f"El modelo `{self.model}` no devolvió una respuesta válida contra el esquema "
-            f"tras dos intentos. Detalle: {str(last_error)[:300]}. "
-            "Los modelos locales chicos a veces fallan acá; probá con uno más grande "
-            "(ej. `llama3.1:70b`) o con el motor Claude."
+            f"Model `{self.model}` failed to produce a schema-valid response after two "
+            f"attempts. Detail: {str(last_error)[:300]}. "
+            "Small local models sometimes fail here; try a larger one "
+            "(e.g. `llama3.1:70b`) or the Claude engine."
         )
 
     def extract_rubric(self, jd_text: str) -> Rubric:
         rubric = self._chat(
             RUBRIC_SYSTEM,
-            f"Descripción del puesto:\n\n{jd_text}",
+            f"Job description:\n\n{jd_text}",
             Rubric,
         )
         if not rubric.competencies:
             raise LLMError(
-                f"El modelo `{self.model}` devolvió una rúbrica vacía. "
-                "Probá de nuevo o usá un modelo más grande."
+                f"Model `{self.model}` returned an empty rubric. "
+                "Try again or use a larger model."
             )
         return rubric
 
@@ -121,5 +120,5 @@ class OllamaProvider:
             cv_text = _pdf_to_text(cv_pdf)
 
         system = f"{EVAL_INSTRUCTIONS}\n\n{job_context(jd_text, rubric.model_dump_json(indent=2))}"
-        user = f"CV (archivo: {filename}):\n\n{cv_text}\n\nEvaluá este CV contra la rúbrica."
+        user = f"Resume (file: {filename}):\n\n{cv_text}\n\nEvaluate this resume against the rubric."
         return self._chat(system, user, CandidateEvaluation)

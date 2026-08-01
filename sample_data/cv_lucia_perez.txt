@@ -1,20 +1,20 @@
 LUCÍA PÉREZ
-Account Manager | Ciudad de México
+Account Manager | Mexico City
 
-EXPERIENCIA
+EXPERIENCE
 
-Account Manager — DataFlow (SaaS de analytics, serie B) | 2022 - actualidad
-- Cartera mixta de 35 cuentas mid-market y enterprise en México y Colombia.
-- Renovaciones y detección de oportunidades de upsell en coordinación con Ventas.
-- Uso diario de Salesforce y Gainsight para salud de cuenta y forecast de renovaciones.
-- Participo en QBRs junto al Customer Success Lead de la región.
+Account Manager — DataFlow (analytics SaaS, series B) | 2022 - present
+- Mixed portfolio of 35 mid-market and enterprise accounts in Mexico and Colombia.
+- Renewals and upsell opportunity detection in coordination with Sales.
+- Daily use of Salesforce and Gainsight for account health and renewal forecasting.
+- Take part in QBRs alongside the regional Customer Success Lead.
 
-Analista de Marketing — Agencia Vertical | 2020 - 2022
-- Gestión de campañas digitales y reporting para clientes B2B.
+Marketing Analyst — Agencia Vertical | 2020 - 2022
+- Managed digital campaigns and reporting for B2B clients.
 
-EDUCACIÓN
-- Licenciatura en Psicología Organizacional, UNAM (2020)
+EDUCATION
+- Bachelor's degree in Organizational Psychology, UNAM (2020)
 
-IDIOMAS Y HERRAMIENTAS
-- Inglés avanzado (uso profesional diario con el equipo de producto en Austin)
+LANGUAGES & TOOLS
+- Advanced English (daily professional use with the product team in Austin)
 - Salesforce, Gainsight, Looker Studio

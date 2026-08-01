@@ -1,4 +1,4 @@
-"""Persistencia en SQLite: búsquedas (jobs) y candidatos evaluados."""
+"""SQLite persistence: jobs and evaluated candidates."""
 
 import json
 import sqlite3

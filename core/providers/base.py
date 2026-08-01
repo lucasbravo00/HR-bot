@@ -1,8 +1,8 @@
-"""Contrato común para proveedores de LLM.
+"""Common contract for LLM providers.
 
-Cualquier motor (API en la nube o modelo local) debe implementar estas dos
-operaciones devolviendo los mismos modelos Pydantic. Los errores internos de cada
-proveedor se traducen a `LLMError` con un mensaje apto para mostrar en la UI.
+Any engine (cloud API or local model) must implement these two operations and
+return the same Pydantic models. Provider-internal errors are translated into
+`LLMError` with a message fit for the UI.
 """
 
 from typing import Protocol
@@ -11,7 +11,7 @@ from ..models import CandidateEvaluation, Rubric
 
 
 class LLMError(RuntimeError):
-    """Error de un proveedor de LLM, con mensaje legible para el usuario final."""
+    """LLM provider error carrying a user-facing message."""
 
 
 class LLMProvider(Protocol):

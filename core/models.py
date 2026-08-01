@@ -1,11 +1,11 @@
-"""Esquemas Pydantic compartidos entre la extracción de rúbrica, la evaluación y la UI."""
+"""Pydantic schemas shared by rubric extraction, CV evaluation and the UI."""
 
 from typing import Literal
 
 from pydantic import BaseModel
 
-Category = Literal["tecnica", "blanda", "idioma", "otra"]
-EvidenceStatus = Literal["evidencia_encontrada", "evidencia_parcial", "sin_evidencia"]
+Category = Literal["technical", "soft", "language", "other"]
+EvidenceStatus = Literal["evidence_found", "partial_evidence", "no_evidence"]
 
 
 class Competency(BaseModel):
