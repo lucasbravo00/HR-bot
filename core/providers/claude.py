@@ -29,6 +29,16 @@ def _translate_errors():
         raise LLMError("Could not reach the Anthropic API. Check your connection.")
     except anthropic.AnthropicError as e:
         raise LLMError(f"Anthropic configuration error: {e}. Is ANTHROPIC_API_KEY set?")
+    except TypeError as e:
+        # The SDK raises a bare TypeError (not an AnthropicError subclass) when it
+        # can't resolve any credentials (no API key, auth token, or active profile).
+        if "authentication" in str(e).lower():
+            raise LLMError(
+                "No Anthropic credentials found. Set the ANTHROPIC_API_KEY environment "
+                "variable, authenticate with `ant auth login`, or switch to the Ollama "
+                "engine in the sidebar."
+            )
+        raise
 
 
 class ClaudeProvider:
