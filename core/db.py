@@ -1,4 +1,4 @@
-"""SQLite persistence: jobs and evaluated candidates."""
+"""SQLite persistence: jobs, evaluated candidates, and their generated artifacts."""
 
 import json
 import sqlite3
@@ -7,12 +7,26 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "hr_copilot.db"
 
+# Columns added after the initial schema shipped, applied to existing databases.
+CANDIDATE_COLUMNS = {
+    "blind": "INTEGER NOT NULL DEFAULT 0",
+    "interview_kit_json": "TEXT",
+    "emails_json": "TEXT",
+}
+
 
 def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
+    existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    for name, ddl in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
 def init_db() -> None:
@@ -38,11 +52,14 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_columns(conn, "candidates", CANDIDATE_COLUMNS)
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
+# ------------------------------------------------------------------ jobs
 
 def create_job(title: str, jd_text: str, rubric_json: str) -> int:
     with _conn() as conn:
@@ -73,6 +90,8 @@ def delete_job(job_id: int) -> None:
         conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
 
 
+# ------------------------------------------------------------------ candidates
+
 def add_candidate(
     job_id: int,
     name: str,
@@ -80,13 +99,24 @@ def add_candidate(
     evaluation_json: str,
     score: float,
     missing_must_haves: list[str],
+    blind: bool = False,
 ) -> int:
     with _conn() as conn:
         cur = conn.execute(
             """INSERT INTO candidates
-               (job_id, name, filename, evaluation_json, score, missing_must_haves_json, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (job_id, name, filename, evaluation_json, score, json.dumps(missing_must_haves), _now()),
+               (job_id, name, filename, evaluation_json, score,
+                missing_must_haves_json, blind, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                job_id,
+                name,
+                filename,
+                evaluation_json,
+                score,
+                json.dumps(missing_must_haves),
+                int(blind),
+                _now(),
+            ),
         )
         return cur.lastrowid
 
@@ -107,3 +137,26 @@ def candidate_filenames(job_id: int) -> set[str]:
 def delete_candidate(candidate_id: int) -> None:
     with _conn() as conn:
         conn.execute("DELETE FROM candidates WHERE id = ?", (candidate_id,))
+
+
+# ------------------------------------------------------------------ artifacts
+
+def save_interview_kit(candidate_id: int, kit_json: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE candidates SET interview_kit_json = ? WHERE id = ?", (kit_json, candidate_id)
+        )
+
+
+def save_email(candidate_id: int, kind: str, subject: str, body: str) -> None:
+    """Store one draft per email kind, replacing any previous draft of that kind."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT emails_json FROM candidates WHERE id = ?", (candidate_id,)
+        ).fetchone()
+        emails = json.loads(row["emails_json"]) if row and row["emails_json"] else {}
+        emails[kind] = {"subject": subject, "body": body}
+        conn.execute(
+            "UPDATE candidates SET emails_json = ? WHERE id = ?",
+            (json.dumps(emails), candidate_id),
+        )

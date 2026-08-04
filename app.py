@@ -1,4 +1,4 @@
-"""People Ops Copilot — MVP 1: recruiting core with evidence-based evaluation."""
+"""People Ops Copilot — recruiting core with evidence-based evaluation."""
 
 import json
 
@@ -7,8 +7,15 @@ import streamlit as st
 
 from core import db
 from core.llm import OLLAMA_DEFAULT_MODEL, LLMError, LLMProvider, get_provider
-from core.models import CandidateEvaluation, Competency, Rubric
+from core.models import CandidateEvaluation, Competency, InterviewKit, Rubric
 from core.scoring import STATUS_LABELS, score_candidate
+from core.tasks import (
+    anonymize_resume,
+    draft_email,
+    evaluate_cv,
+    extract_rubric,
+    generate_interview_kit,
+)
 
 st.set_page_config(page_title="People Ops Copilot", page_icon="🧭", layout="wide")
 db.init_db()
@@ -25,6 +32,12 @@ CATEGORIES = ["technical", "soft", "language", "other"]
 ENGINE_LABELS = {
     "Claude (Anthropic)": "claude",
     "Ollama (local, open source)": "ollama",
+}
+
+EMAIL_LABELS = {
+    "Interview invitation": "invitation",
+    "Rejection": "rejection",
+    "Follow-up": "follow_up",
 }
 
 NEW_JOB_OPTION = "➕ New job"
@@ -74,7 +87,7 @@ def render_new_job(provider: LLMProvider) -> None:
     if st.button("✨ Extract rubric with AI", type="primary", disabled=not jd_text.strip()):
         try:
             with st.spinner("Analyzing the job description…"):
-                rubric = provider.extract_rubric(jd_text)
+                rubric = extract_rubric(provider, jd_text)
         except LLMError as e:
             st.error(str(e))
             return
@@ -139,9 +152,9 @@ def render_rubric_tab(job) -> Rubric:
     return rubric
 
 
-# ---------------------------------------------------------------- candidates
+# ---------------------------------------------------------------- evaluation run
 
-def evaluate_files(job, rubric: Rubric, files, provider: LLMProvider) -> None:
+def evaluate_files(job, rubric: Rubric, files, provider: LLMProvider, blind: bool) -> None:
     existing = db.candidate_filenames(job["id"])
     progress = st.progress(0.0)
     for i, f in enumerate(files):
@@ -149,33 +162,50 @@ def evaluate_files(job, rubric: Rubric, files, provider: LLMProvider) -> None:
             st.info(f"⏭️ {f.name}: already evaluated for this job, skipping.")
             progress.progress((i + 1) / len(files))
             continue
+
+        is_pdf = f.name.lower().endswith(".pdf")
+        cv_pdf = f.getvalue() if is_pdf else None
+        cv_text = None if is_pdf else f.getvalue().decode("utf-8", errors="replace")
+        blind_name = None
+        # Filenames leak identity ("cv_ana_garcia.pdf"), so blind runs get a neutral one.
+        eval_filename = f.name
+
         try:
+            if blind:
+                with st.spinner(f"Anonymizing {f.name}…"):
+                    anon = anonymize_resume(provider, f.name, cv_text=cv_text, cv_pdf=cv_pdf)
+                # The evaluator sees only the redacted text — never the original document.
+                cv_text, cv_pdf = anon.redacted_text, None
+                blind_name = anon.candidate_name
+                eval_filename = "redacted résumé"
+
             with st.spinner(f"Evaluating {f.name} with {provider.name}…"):
-                if f.name.lower().endswith(".pdf"):
-                    evaluation = provider.evaluate_cv(job["jd_text"], rubric, f.name, cv_pdf=f.getvalue())
-                else:
-                    evaluation = provider.evaluate_cv(
-                        job["jd_text"], rubric, f.name, cv_text=f.getvalue().decode("utf-8", errors="replace")
-                    )
+                evaluation = evaluate_cv(
+                    provider, job["jd_text"], rubric, eval_filename, cv_text=cv_text, cv_pdf=cv_pdf
+                )
         except LLMError as e:
             st.error(f"{f.name}: {e}")
             continue
 
         result = score_candidate(rubric, evaluation)
+        # In blind mode the identity comes from the anonymizer, not the evaluator.
+        display_name = blind_name or evaluation.candidate_name
         db.add_candidate(
             job["id"],
-            evaluation.candidate_name,
+            display_name,
             f.name,
             evaluation.model_dump_json(),
             result["score"],
             result["missing_must_haves"],
+            blind=blind,
         )
         progress.progress((i + 1) / len(files))
     st.rerun()
 
 
-def render_candidate_detail(row, rubric: Rubric) -> None:
-    evaluation = CandidateEvaluation.model_validate_json(row["evaluation_json"])
+# ---------------------------------------------------------------- candidate detail
+
+def render_report(row, evaluation: CandidateEvaluation, rubric: Rubric) -> None:
     missing = json.loads(row["missing_must_haves_json"])
     comp_by_name = {c.name.casefold().strip(): c for c in rubric.competencies}
 
@@ -192,22 +222,119 @@ def render_candidate_detail(row, rubric: Rubric) -> None:
             st.markdown(f"> {quote}")
         st.caption(ev.reasoning)
 
+
+def render_interview_kit(row, evaluation: CandidateEvaluation, rubric: Rubric,
+                         job, provider: LLMProvider) -> None:
+    cid = row["id"]
+    if row["interview_kit_json"]:
+        kit = InterviewKit.model_validate_json(row["interview_kit_json"])
+        st.markdown(f"**Pre-interview brief**\n\n{kit.executive_summary}")
+        if kit.focus_areas:
+            st.markdown("**Focus areas:** " + " · ".join(f"`{a}`" for a in kit.focus_areas))
+        st.divider()
+        for i, q in enumerate(kit.questions, 1):
+            st.markdown(f"**{i}. {q.question}**")
+            st.caption(f"🎯 {q.competency_name} — {q.rationale}")
+            st.caption(f"👂 Listen for: {q.what_to_listen_for}")
+        label = "🔄 Regenerate interview kit"
+    else:
+        st.info(
+            "Generate a pre-interview brief and behavioral (STAR) questions built from "
+            "this candidate's evidence gaps."
+        )
+        label = "🎤 Generate interview kit"
+
+    if st.button(label, key=f"kit_{cid}"):
+        try:
+            with st.spinner("Preparing the interview…"):
+                kit = generate_interview_kit(
+                    provider, job["jd_text"], rubric, evaluation,
+                    row["score"], json.loads(row["missing_must_haves_json"]),
+                )
+        except LLMError as e:
+            st.error(str(e))
+            return
+        db.save_interview_kit(cid, kit.model_dump_json())
+        st.rerun()
+
+
+def render_emails(row, evaluation: CandidateEvaluation, job, provider: LLMProvider) -> None:
+    cid = row["id"]
+    st.caption(
+        "Drafts only — nothing is ever sent from here. Review, edit and send from your "
+        "own email client. Internal scores and rubric judgments are never disclosed."
+    )
+    kind_label = st.selectbox("Email type", list(EMAIL_LABELS), key=f"email_kind_{cid}")
+    kind = EMAIL_LABELS[kind_label]
+    notes = st.text_input(
+        "Anything to add? (optional)",
+        placeholder="e.g. propose Tuesday or Thursday, mention it is a 45-minute call",
+        key=f"email_notes_{cid}",
+    )
+
+    if st.button(f"✉️ Draft {kind_label.lower()}", key=f"email_btn_{cid}"):
+        try:
+            with st.spinner("Drafting…"):
+                email = draft_email(
+                    provider, kind, job["jd_text"], job["title"],
+                    row["name"], evaluation, notes,
+                )
+        except LLMError as e:
+            st.error(str(e))
+            return
+        db.save_email(cid, kind, email.subject, email.body)
+        st.rerun()
+
+    emails = json.loads(row["emails_json"]) if row["emails_json"] else {}
+    if kind in emails:
+        draft = emails[kind]
+        st.text_input("Subject", value=draft["subject"], key=f"email_subject_{cid}_{kind}")
+        st.text_area("Body", value=draft["body"], height=280, key=f"email_body_{cid}_{kind}")
+
+
+def render_candidate_detail(row, rubric: Rubric, job, provider: LLMProvider) -> None:
+    evaluation = CandidateEvaluation.model_validate_json(row["evaluation_json"])
+
+    if row["blind"]:
+        st.caption("🕶️ Evaluated blind — the model judged a redacted resume with no identity.")
+
+    tab_report, tab_kit, tab_email = st.tabs(["📄 Report", "🎤 Interview kit", "✉️ Emails"])
+    with tab_report:
+        render_report(row, evaluation, rubric)
+    with tab_kit:
+        render_interview_kit(row, evaluation, rubric, job, provider)
+    with tab_email:
+        render_emails(row, evaluation, job, provider)
+
+    st.divider()
     if st.button("🗑️ Delete candidate", key=f"del_{row['id']}"):
         db.delete_candidate(row["id"])
         st.rerun()
 
+
+# ---------------------------------------------------------------- candidates tab
 
 def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
     st.markdown(
         "Upload resumes as PDF or plain text. Each candidate is evaluated **independently** "
         "against the rubric; the score is a weighted sum computed in code."
     )
+    blind = st.toggle(
+        "🕶️ Blind screening",
+        value=True,
+        help=(
+            "Strips name, contact details, location, age and other personal markers before "
+            "the evaluator sees the resume, keeping all professional content verbatim. "
+            "You still see the candidate's identity here. Adds one AI call per resume."
+        ),
+        key=f"blind_{job['id']}",
+    )
     files = st.file_uploader(
         "Candidate resumes", type=["pdf", "txt", "md"], accept_multiple_files=True,
         key=f"uploader_{job['id']}",
     )
     if files and st.button(f"🔍 Evaluate {len(files)} candidate(s)", type="primary"):
-        evaluate_files(job, rubric, files, provider)
+        evaluate_files(job, rubric, files, provider, blind)
 
     candidates = db.list_candidates(job["id"])
     if not candidates:
@@ -223,6 +350,7 @@ def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
         [
             {
                 "Candidate": r["name"],
+                "Blind": "🕶️" if r["blind"] else "—",
                 "File": r["filename"],
                 "Match": r["score"],
                 "Must-haves without evidence": ", ".join(json.loads(r["missing_must_haves_json"])) or "—",
@@ -243,7 +371,7 @@ def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
     for row in candidates:
         flag = " ⚠️" if json.loads(row["missing_must_haves_json"]) else ""
         with st.expander(f"{row['name']} — {row['score']:.1f}%{flag}"):
-            render_candidate_detail(row, rubric)
+            render_candidate_detail(row, rubric, job, provider)
 
 
 # ---------------------------------------------------------------- main

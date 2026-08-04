@@ -1,13 +1,17 @@
 """Common contract for LLM providers.
 
-Any engine (cloud API or local model) must implement these two operations and
-return the same Pydantic models. Provider-internal errors are translated into
-`LLMError` with a message fit for the UI.
+Providers expose a single primitive — a schema-constrained completion — and know
+nothing about recruiting. All domain logic (which prompt, which schema) lives in
+`core/tasks.py`, so adding a feature never means touching an engine.
+
+Provider-internal errors are translated into `LLMError` with a user-facing message.
 """
 
-from typing import Protocol
+from typing import Protocol, TypeVar
 
-from ..models import CandidateEvaluation, Rubric
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class LLMError(RuntimeError):
@@ -17,13 +21,18 @@ class LLMError(RuntimeError):
 class LLMProvider(Protocol):
     name: str
 
-    def extract_rubric(self, jd_text: str) -> Rubric: ...
-
-    def evaluate_cv(
+    def complete(
         self,
-        jd_text: str,
-        rubric: Rubric,
-        filename: str,
-        cv_text: str | None = None,
-        cv_pdf: bytes | None = None,
-    ) -> CandidateEvaluation: ...
+        instructions: str,
+        user_text: str,
+        schema: type[T],
+        context: str | None = None,
+        pdf: bytes | None = None,
+    ) -> T:
+        """Run one schema-constrained completion.
+
+        `instructions` is the task's system prompt. `context` is the bulky, reusable
+        part of the prompt (job description + rubric) that providers may cache.
+        `pdf`, when given, carries the document the task is about.
+        """
+        ...

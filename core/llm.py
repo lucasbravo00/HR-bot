@@ -1,7 +1,7 @@
 """LLM provider facade.
 
-The UI requests a provider by name and works against the common interface
-(`LLMProvider`); engine-specific details live in `core/providers/`.
+The UI requests a provider by name and passes it to the tasks in `core/tasks.py`;
+engine-specific details live in `core/providers/`.
 """
 
 from .providers.base import LLMError, LLMProvider
