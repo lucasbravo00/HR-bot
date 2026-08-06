@@ -69,3 +69,73 @@ class InterviewKit(BaseModel):
 class EmailDraft(BaseModel):
     subject: str
     body: str
+
+
+# ------------------------------------------------------------------ job descriptions
+
+class JobDescriptionDraft(BaseModel):
+    title: str
+    summary: str
+    responsibilities: list[str]
+    hard_requirements: list[str]
+    nice_to_haves: list[str]
+    what_we_offer: list[str]
+
+    def to_text(self) -> str:
+        """Render as plain text, so a draft can feed straight into rubric extraction."""
+        sections = [
+            self.title,
+            "",
+            self.summary,
+            "",
+            "Responsibilities:",
+            *(f"- {item}" for item in self.responsibilities),
+            "",
+            "Hard requirements:",
+            *(f"- {item}" for item in self.hard_requirements),
+        ]
+        if self.nice_to_haves:
+            sections += ["", "Nice to have:", *(f"- {item}" for item in self.nice_to_haves)]
+        if self.what_we_offer:
+            sections += ["", "What we offer:", *(f"- {item}" for item in self.what_we_offer)]
+        return "\n".join(sections)
+
+
+# ------------------------------------------------------------------ competency matrix
+
+class LevelExpectation(BaseModel):
+    level: str
+    behavioral_indicator: str
+
+
+class MatrixCompetency(BaseModel):
+    name: str
+    category: Category
+    definition: str
+    levels: list[LevelExpectation]
+
+
+class CompetencyMatrix(BaseModel):
+    role_family: str
+    levels: list[str]
+    competencies: list[MatrixCompetency]
+
+
+# ------------------------------------------------------------------ onboarding
+
+class OnboardingMilestone(BaseModel):
+    title: str
+    description: str
+    success_signal: str
+
+
+class OnboardingPhase(BaseModel):
+    period: str
+    focus: str
+    milestones: list[OnboardingMilestone]
+
+
+class OnboardingPlan(BaseModel):
+    summary: str
+    ramp_up_priorities: list[str]
+    phases: list[OnboardingPhase]

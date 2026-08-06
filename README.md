@@ -1,11 +1,19 @@
 # 🧭 People Ops Copilot
 
-An AI recruiting assistant designed as **decision support** for the recruiter — not as an
-automated decision-maker. Every model recommendation is backed by evidence quoted
-verbatim from the resume, and the final score is computed in code, deterministically
-and auditably.
+An AI assistant for hiring and people operations, designed as **decision support** for
+the practitioner — not as an automated decision-maker. Every recommendation is backed by
+evidence quoted verbatim from the source, and anything that must be correct is computed
+in code rather than trusted to a model.
 
-## How it works
+Three modules, one foundation:
+
+| Module | What it does |
+|---|---|
+| 🎯 **Recruiting** | Job description → rubric → blind evaluation → ranking → interview kit → emails → onboarding plan |
+| 📝 **Job descriptions** | A short brief becomes a posting with honest, proportionate requirements — then feeds straight into a hiring process |
+| 📊 **Competency matrices** | Competencies by seniority level, with observable behavior at each step |
+
+## Recruiting
 
 1. **Job description → rubric.** The AI extracts a competency rubric (technical, soft
    skills, languages) with weights, evidence criteria and must-have requirements — in
@@ -18,22 +26,44 @@ and auditably.
 3. **Resume → evidence-based evaluation.** Each resume (PDF or text) is evaluated
    **independently** against the rubric. Per competency, the model returns one of three
    states — *evidence found*, *partial evidence* or *no evidence* — along with
-   **verbatim quotes** from the resume and a brief justification. "No evidence" means
-   the resume doesn't mention it, not that the candidate lacks the competency.
+   **verbatim quotes** and a brief justification. "No evidence" means the resume doesn't
+   mention it, not that the candidate lacks the competency.
 4. **Ranking computed in code.** The score is a deterministic weighted sum of the
    per-competency judgments (`core/scoring.py`). The LLM never generates the number:
    it judges evidence; the arithmetic is reproducible and auditable.
 5. **Interview kit.** A pre-interview brief plus behavioral (STAR) questions built from
    *this* candidate's evidence gaps — grounded in their actual experience, not generic.
-   Each question ships with why it matters and what a strong answer sounds like, so
-   candidates are assessed consistently.
+   Each question ships with why it matters and what a strong answer sounds like.
 6. **Email drafts.** Invitation, rejection and follow-up drafts the recruiter reviews,
    edits and sends themselves. Nothing is ever sent from the app, and internal scores
    and rubric judgments are never disclosed to candidates.
+7. **Onboarding plan.** The evidence gathered while hiring becomes the new hire's first
+   90 days: what to ramp up on fastest, sequenced from context to supervised delivery to
+   independent ownership, with an observable success signal per milestone.
 
-### Responsible-design decisions
+## Job descriptions
 
-- **Human-in-the-loop**: the tool informs, the recruiter decides. The rubric is
+A short brief (role, seniority, context, must-haves) becomes a full posting. The
+generator is built to counteract the usual failure modes: it never invents salary,
+benefits or perks the brief didn't mention; it keeps must-haves to what is genuinely
+disqualifying; it writes requirements as observable capability rather than pedigree; and
+it avoids gender-coded and culture-fit language that narrows the applicant pool.
+
+Finished drafts download as Markdown, or go straight into a hiring process with one
+click — the posting becomes the rubric candidates are scored against.
+
+## Competency matrices
+
+Competencies by seniority level for calibration, career paths and development
+conversations. The hard part of a competency matrix is that levels must differ in
+**kind**, not intensity — "does X", "does X well", "does X very well" is a useless
+matrix. The prompt pushes for real progression in scope, autonomy, complexity and blast
+radius, with behavior a manager could actually witness. Matrices can start from an
+existing job and download as CSV.
+
+## Responsible-design decisions
+
+- **Human-in-the-loop**: the tool informs, the practitioner decides. The rubric is
   editable and every report exposes the full reasoning for review.
 - **No magic numbers**: the model is never asked for a "% match" (LLMs produce
   apparent precision without substance). The score comes from recruiter-defined weights.
@@ -44,6 +74,11 @@ and auditably.
   first name in place. Every anonymized resume is therefore swept deterministically
   (`core/redaction.py`) for leftover names, emails, phones and URLs, and the resume's
   filename is replaced too, since `cv_ana_garcia.pdf` is itself an identity leak.
+- **Blind screening ends where it should.** It protects the ranking stage. Once a
+  recruiter is preparing an interview or a ramp-up plan, the candidate is known to them
+  and their real name is used again.
+- **Gaps are questions, not verdicts.** Missing evidence drives interview questions and
+  onboarding priorities — never framed as an established deficiency.
 - **Synthetic data**: the resumes in `sample_data/` are fictional. Never push real
   resumes to a repository.
 
@@ -71,13 +106,12 @@ engines switchable from the sidebar:
 
 The local option matters for HR: resumes are sensitive personal data, and being able to
 process everything on-premise is a real requirement in many organizations. The design
-mitigates the local model's lower quality: the rubric is always recruiter-editable, the
-score is computed in code, and blind screening is enforced deterministically — the
-local model only contributes evidence judgments, which the report exposes with quotes
-for human review.
+mitigates the local model's lower quality: the rubric is always editable, the score is
+computed in code, and blind screening is enforced deterministically — the local model
+only contributes judgments, which the UI exposes with quotes for human review.
 
-Providers implement a single primitive (a schema-constrained completion), so every
-recruiting task lives once in `core/tasks.py` and works on any engine.
+Providers implement a single primitive (a schema-constrained completion), so every task
+lives once in `core/tasks.py` and works on any engine.
 
 ## Setup
 
@@ -98,50 +132,45 @@ export ANTHROPIC_API_KEY="your-api-key"   # or authenticate with `ant auth login
 For a quick tour: create a job by pasting `sample_data/job_customer_success.txt` and
 upload the three synthetic resumes from `sample_data/` (strong, medium and weak fit).
 
-Job descriptions in any language work: the prompts instruct the model to write the
-rubric, reports, questions and emails in the language of the job description.
+Job descriptions in any language work: the prompts instruct the model to write rubrics,
+reports, questions, emails, postings and matrices in the language of the source text.
 
 ## Tests
 
-The deterministic parts — scoring and redaction — are covered by tests. Every redaction
-case comes from a real failure observed while testing against a local model.
+The deterministic parts — scoring, redaction, rendering and level parsing — are covered
+by tests. Several redaction cases come from real failures observed against a local model.
 
 ```bash
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest tests/ -q
 ```
 
-## Stack
-
-- **Python + Anthropic API** (`claude-opus-4-8`) with structured outputs
-  (`messages.parse` + Pydantic), prompt caching on the per-job context, and native
-  PDF reading.
-- **Ollama** as the alternative local open-source engine (Llama 3.1 by default,
-  configurable), with structured output via JSON Schema.
-- **Streamlit** for the UI, **SQLite** for persistence.
-
 ## Project layout
 
 ```
-app.py                    # Streamlit UI (engine selector, blind toggle, candidate tabs)
-core/models.py            # Pydantic schemas for every task
-core/prompts.py           # Prompts, shared across engines
-core/tasks.py             # Recruiting tasks, written once against the provider interface
-core/llm.py               # Provider facade
-core/providers/base.py    # Common interface (one schema-constrained completion) + LLMError
-core/providers/claude.py  # Claude engine (Anthropic API)
-core/providers/ollama.py  # Local open-source engine (Ollama)
-core/redaction.py         # Deterministic blind-screening safety net
-core/scoring.py           # Deterministic scoring + missing must-have detection
-core/pdf.py               # Local PDF text extraction
-core/db.py                # SQLite persistence
-tests/                    # Scoring and redaction regression tests
-sample_data/              # Synthetic demo job description and resumes
+app.py                          # Router: navigation, engine selection, module dispatch
+views/recruiting.py             # Jobs, rubrics, evaluation, interview kits, emails, onboarding
+views/job_descriptions.py       # Job description generator
+views/competency_matrices.py    # Competency matrix builder
+views/common.py                 # Engine picker and shared UI helpers
+core/models.py                  # Pydantic schemas for every task
+core/prompts.py                 # Prompts, shared across engines
+core/tasks.py                   # Tasks, written once against the provider interface
+core/llm.py                     # Provider facade
+core/providers/base.py          # Common interface (one schema-constrained completion)
+core/providers/claude.py        # Claude engine (Anthropic API)
+core/providers/ollama.py        # Local open-source engine (Ollama)
+core/redaction.py               # Deterministic blind-screening safety net
+core/scoring.py                 # Deterministic scoring + missing must-have detection
+core/pdf.py                     # Local PDF text extraction
+core/db.py                      # SQLite persistence
+tests/                          # Regression tests for the deterministic pieces
+sample_data/                    # Synthetic demo job description and resumes
 ```
 
 ## Roadmap
 
-- **Next**: recruiter decision log (what the AI suggested vs. what the human decided),
-  test-retest consistency checks of evaluations, side-by-side engine comparison.
-- **Later (the full copilot)**: job description generator, competency matrices,
-  onboarding and development plans — as modules on the same foundation.
+- Recruiter decision log: what the AI suggested vs. what the human decided.
+- Test-retest consistency checks — run the same resume twice and measure agreement.
+- Side-by-side engine comparison on the same rubric.
+- Development plans and 1:1 feedback prep, built on the competency matrix.

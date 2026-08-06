@@ -7,16 +7,22 @@ capability never has to be implemented twice.
 from .models import (
     AnonymizedResume,
     CandidateEvaluation,
+    CompetencyMatrix,
     EmailDraft,
     EmailKind,
     InterviewKit,
+    JobDescriptionDraft,
+    OnboardingPlan,
     Rubric,
 )
 from .prompts import (
     ANONYMIZE_SYSTEM,
+    COMPETENCY_MATRIX_SYSTEM,
     EMAIL_SYSTEM,
     EVAL_INSTRUCTIONS,
     INTERVIEW_KIT_SYSTEM,
+    JOB_DESCRIPTION_SYSTEM,
+    ONBOARDING_SYSTEM,
     RUBRIC_SYSTEM,
     job_context,
 )
@@ -94,6 +100,19 @@ def evaluate_cv(
     )
 
 
+def _with_real_name(evaluation: CandidateEvaluation, candidate_name: str) -> CandidateEvaluation:
+    """Restore the candidate's name for recruiter-facing artifacts.
+
+    A blind evaluation carries a placeholder ("Redacted Résumé") because the evaluator
+    never saw who it was judging. Blind screening protects the ranking stage — by the
+    time a recruiter is preparing an interview or a ramp-up plan, the person is known
+    to them, and a brief about "Redacted Résumé" would be nonsense.
+    """
+    if not candidate_name.strip():
+        return evaluation
+    return evaluation.model_copy(update={"candidate_name": candidate_name})
+
+
 def generate_interview_kit(
     provider: LLMProvider,
     jd_text: str,
@@ -101,7 +120,9 @@ def generate_interview_kit(
     evaluation: CandidateEvaluation,
     score: float,
     missing_must_haves: list[str],
+    candidate_name: str = "",
 ) -> InterviewKit:
+    evaluation = _with_real_name(evaluation, candidate_name)
     gaps = ", ".join(missing_must_haves) if missing_must_haves else "none"
     return provider.complete(
         instructions=INTERVIEW_KIT_SYSTEM,
@@ -113,6 +134,82 @@ def generate_interview_kit(
             "Prepare the recruiter for this candidate's interview."
         ),
         schema=InterviewKit,
+    )
+
+
+def generate_job_description(
+    provider: LLMProvider,
+    title: str,
+    seniority: str,
+    context: str,
+    must_haves: str,
+    nice_to_haves: str = "",
+    notes: str = "",
+) -> JobDescriptionDraft:
+    brief = [f"Role title: {title}"]
+    if seniority.strip():
+        brief.append(f"Seniority: {seniority}")
+    if context.strip():
+        brief.append(f"Team and company context:\n{context}")
+    if must_haves.strip():
+        brief.append(f"Must-have requirements:\n{must_haves}")
+    if nice_to_haves.strip():
+        brief.append(f"Nice-to-have requirements:\n{nice_to_haves}")
+    if notes.strip():
+        brief.append(f"Additional notes (tone, location, work model):\n{notes}")
+
+    return provider.complete(
+        instructions=JOB_DESCRIPTION_SYSTEM,
+        user_text="\n\n".join(brief) + "\n\nWrite the job description.",
+        schema=JobDescriptionDraft,
+    )
+
+
+def generate_competency_matrix(
+    provider: LLMProvider,
+    role_description: str,
+    levels: list[str],
+) -> CompetencyMatrix:
+    if len(levels) < 2:
+        raise LLMError("A competency matrix needs at least two seniority levels.")
+
+    matrix = provider.complete(
+        instructions=COMPETENCY_MATRIX_SYSTEM,
+        user_text=(
+            f"Role family / role description:\n{role_description}\n\n"
+            f"Seniority levels, in order: {', '.join(levels)}\n\n"
+            "Build the competency matrix."
+        ),
+        schema=CompetencyMatrix,
+    )
+    if not matrix.competencies:
+        raise LLMError(
+            "The model returned an empty matrix. Try again, or use a larger model "
+            "if you are on a local engine."
+        )
+    return matrix
+
+
+def generate_onboarding_plan(
+    provider: LLMProvider,
+    jd_text: str,
+    rubric: Rubric,
+    evaluation: CandidateEvaluation,
+    missing_must_haves: list[str],
+    candidate_name: str = "",
+) -> OnboardingPlan:
+    """Turn the hiring evidence into a ramp-up plan for someone who was just hired."""
+    evaluation = _with_real_name(evaluation, candidate_name)
+    gaps = ", ".join(missing_must_haves) if missing_must_haves else "none"
+    return provider.complete(
+        instructions=ONBOARDING_SYSTEM,
+        context=job_context(jd_text, rubric.model_dump_json(indent=2)),
+        user_text=(
+            f"Evaluation gathered while hiring (JSON):\n{evaluation.model_dump_json(indent=2)}\n\n"
+            f"Must-have competencies with no evidence in the resume: {gaps}.\n\n"
+            "Design this person's first 90 days."
+        ),
+        schema=OnboardingPlan,
     )
 
 

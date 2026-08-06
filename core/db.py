@@ -12,6 +12,7 @@ CANDIDATE_COLUMNS = {
     "blind": "INTEGER NOT NULL DEFAULT 0",
     "interview_kit_json": "TEXT",
     "emails_json": "TEXT",
+    "onboarding_plan_json": "TEXT",
 }
 
 
@@ -48,6 +49,15 @@ def init_db() -> None:
                 evaluation_json TEXT NOT NULL,
                 score REAL NOT NULL,
                 missing_must_haves_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            -- Standalone copilot artifacts (job descriptions, competency matrices).
+            -- One table keyed by kind, so new modules need no schema change.
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
             """
@@ -148,6 +158,14 @@ def save_interview_kit(candidate_id: int, kit_json: str) -> None:
         )
 
 
+def save_onboarding_plan(candidate_id: int, plan_json: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE candidates SET onboarding_plan_json = ? WHERE id = ?",
+            (plan_json, candidate_id),
+        )
+
+
 def save_email(candidate_id: int, kind: str, subject: str, body: str) -> None:
     """Store one draft per email kind, replacing any previous draft of that kind."""
     with _conn() as conn:
@@ -160,3 +178,31 @@ def save_email(candidate_id: int, kind: str, subject: str, body: str) -> None:
             "UPDATE candidates SET emails_json = ? WHERE id = ?",
             (json.dumps(emails), candidate_id),
         )
+
+
+# ------------------------------------------------------------------ documents
+
+def save_document(kind: str, title: str, payload_json: str) -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO documents (kind, title, payload_json, created_at) VALUES (?, ?, ?, ?)",
+            (kind, title, payload_json, _now()),
+        )
+        return cur.lastrowid
+
+
+def list_documents(kind: str) -> list[sqlite3.Row]:
+    with _conn() as conn:
+        return conn.execute(
+            "SELECT * FROM documents WHERE kind = ? ORDER BY created_at DESC", (kind,)
+        ).fetchall()
+
+
+def get_document(document_id: int) -> sqlite3.Row | None:
+    with _conn() as conn:
+        return conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+
+
+def delete_document(document_id: int) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
