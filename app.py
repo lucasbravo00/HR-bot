@@ -7,11 +7,12 @@ off to a module in `views/`.
 import streamlit as st
 
 from core import db
-from views import competency_matrices, job_descriptions, recruiting
+from views import competency_matrices, job_descriptions, recruiting, ui
 from views.common import render_engine_picker
 
 st.set_page_config(page_title="People Ops Copilot", page_icon="🧭", layout="wide")
 db.init_db()
+ui.load_css()
 
 # Streamlit forbids writing to a widget's session_state key once that widget has been
 # instantiated in the same run. Anything that navigates or prefills on the user's

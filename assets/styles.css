@@ -1,0 +1,196 @@
+/* Component layer for the People Ops Copilot.
+   Colors and type come from .streamlit/config.toml; this file covers what the
+   theme system can't reach — Streamlit chrome and the custom card components. */
+
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --ink: #14151A;
+  --ink-2: #2A2D36;
+  --ink-3: #3A3D48;
+  --muted: #7A7F8C;
+  --muted-2: #9AA0AC;
+  --line: #E6E7EC;
+  --line-soft: #EFEFF3;
+  --surface: #FFFFFF;
+  --surface-2: #FAFAFC;
+  --canvas: #F5F5F7;
+  --brand: #4B44E0;
+  --brand-tint: #EFEEFD;
+  --green: #12A06A;
+  --amber: #D89A2B;
+  --neutral: #C6C8D2;
+}
+
+/* ---------------------------------------------------------------- chrome */
+
+/* Streamlit's default top padding wastes the fold; the mockup starts higher. */
+.block-container { padding-top: 2.4rem; padding-bottom: 4rem; max-width: 1100px; }
+
+#MainMenu, footer { visibility: hidden; }
+
+h1, h2, h3 { letter-spacing: -0.015em; }
+h1 { font-size: 1.55rem !important; font-weight: 600 !important; }
+h2 { font-size: 1.2rem !important; font-weight: 600 !important; }
+h3 { font-size: 1rem !important; font-weight: 600 !important; }
+
+/* ---------------------------------------------------------------- sidebar */
+
+[data-testid="stSidebar"] { border-right: 1px solid var(--line); }
+
+/* Sidebar radios read as nav items, not form controls. */
+[data-testid="stSidebar"] [role="radiogroup"] label {
+  padding: 7px 10px;
+  border-radius: 10px;
+  transition: background 120ms ease;
+}
+[data-testid="stSidebar"] [role="radiogroup"] label:hover { background: #F2F2F6; }
+
+/* ---------------------------------------------------------------- tabs */
+
+.stTabs [data-baseweb="tab-list"] { gap: 22px; border-bottom: 1px solid var(--line); }
+.stTabs [data-baseweb="tab"] {
+  padding: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.stTabs [aria-selected="true"] { color: var(--ink) !important; font-weight: 600; }
+
+/* ---------------------------------------------------------------- components */
+
+.pc-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.pc-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 4px 0 10px;
+}
+.pc-label-meta { font-size: 11.5px; color: var(--muted-2); }
+
+.pc-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 12px;
+}
+.pc-card p { margin: 9px 0 0; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+
+/* Candidate row: rank, name, score, evidence bar. */
+.pc-cand { display: flex; align-items: center; gap: 10px; }
+.pc-rank {
+  width: 24px; height: 24px; flex: 0 0 24px;
+  border-radius: 7px;
+  background: var(--line-soft);
+  color: #5A5F6B;
+  font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.pc-cand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.pc-score {
+  margin-left: auto;
+  font-size: 15px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pc-bar {
+  height: 5px; border-radius: 3px;
+  background: #E9E9EF;
+  margin-top: 10px;
+  overflow: hidden;
+}
+.pc-bar > div { height: 100%; border-radius: 3px; }
+
+/* Evidence card: left accent encodes the evidence status. */
+.pc-ev {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--neutral);
+  border-radius: 12px;
+  padding: 15px 18px;
+  margin-bottom: 10px;
+}
+.pc-ev-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.pc-ev-name { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+.pc-ev-meta {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+.pc-quote {
+  margin-top: 10px;
+  background: var(--surface-2);
+  border-radius: 9px;
+  padding: 10px 13px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.pc-reason { font-size: 12.5px; color: var(--muted); margin-top: 9px; line-height: 1.5; }
+
+.pc-badge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.pc-chip {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  background: #F2F2F6;
+  border-radius: 6px;
+  padding: 4px 9px;
+  margin: 0 6px 6px 0;
+}
+
+/* Tally of evidence counts under the recruiter summary. */
+.pc-tally { display: flex; gap: 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.pc-tally-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-3); }
+.pc-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+.pc-alert {
+  background: #FDF3F2;
+  border: 1px solid #F3D3D0;
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+}
+.pc-alert-title { font-size: 13.5px; font-weight: 600; color: #8F2C26; }
+.pc-alert-body { font-size: 12.5px; color: #8F2C26; opacity: 0.85; margin-top: 3px; line-height: 1.5; }
+
+/* Numbered interview question. */
+.pc-q { display: flex; gap: 12px; }
+.pc-q-n {
+  width: 22px; height: 22px; flex: 0 0 22px;
+  border-radius: 7px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.pc-q-text { font-size: 14px; font-weight: 600; line-height: 1.45; letter-spacing: -0.01em; }
+.pc-q-cols { display: flex; gap: 18px; margin-top: 11px; flex-wrap: wrap; }
+.pc-q-col { flex: 1; min-width: 220px; }
+.pc-q-h {
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted-2);
+}
+.pc-q-b { font-size: 12.5px; color: #4A4E58; margin-top: 4px; line-height: 1.5; }
+
+/* Milestone in an onboarding phase. */
+.pc-ms { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 17px; margin-bottom: 9px; }
+.pc-ms-title { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+.pc-ms-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 4px; line-height: 1.5; }
+.pc-ms-signal { font-size: 12px; color: #0E6B4A; background: #E6F4EE; border-radius: 7px; padding: 7px 10px; margin-top: 9px; line-height: 1.45; }

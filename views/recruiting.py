@@ -1,6 +1,7 @@
 """Recruiting module: jobs, rubrics, candidate evaluation and per-candidate artifacts."""
 
 import json
+from collections import Counter
 
 import pandas as pd
 import streamlit as st
@@ -14,7 +15,7 @@ from core.models import (
     OnboardingPlan,
     Rubric,
 )
-from core.scoring import STATUS_LABELS, score_candidate
+from core.scoring import score_candidate
 from core.tasks import (
     anonymize_resume,
     draft_email,
@@ -23,6 +24,8 @@ from core.tasks import (
     generate_interview_kit,
     generate_onboarding_plan,
 )
+
+from . import ui
 
 CATEGORIES = ["technical", "soft", "language", "other"]
 
@@ -178,18 +181,30 @@ def render_report(row, evaluation: CandidateEvaluation, rubric: Rubric) -> None:
     missing = json.loads(row["missing_must_haves_json"])
     comp_by_name = {c.name.casefold().strip(): c for c in rubric.competencies}
 
-    if missing:
-        st.error("⚠️ No evidence for must-have requirements: " + ", ".join(missing))
-    st.markdown(f"**Recruiter summary:**\n\n{evaluation.summary}")
-    st.divider()
+    counts = Counter(ev.status for ev in evaluation.evaluations)
+    ui.summary_card(
+        "Recruiter summary",
+        evaluation.summary,
+        tally=[
+            ("evidence found", counts["evidence_found"], "#12A06A"),
+            ("partial", counts["partial_evidence"], "#D89A2B"),
+            ("no evidence", counts["no_evidence"], "#C6C8D2"),
+        ],
+    )
 
+    if missing:
+        ui.alert(
+            "No evidence for must-have requirements",
+            f"{', '.join(missing)} — treat as a question for the interview, not a verdict.",
+        )
+
+    ui.section_label("Evidence by competency", "quotes verbatim from the résumé")
     for ev in evaluation.evaluations:
         comp = comp_by_name.get(ev.competency_name.casefold().strip())
-        weight_txt = f" · weight {comp.weight}" + (" · must-have" if comp.must_have else "") if comp else ""
-        st.markdown(f"**{ev.competency_name}**{weight_txt} — {STATUS_LABELS[ev.status]}")
-        for quote in ev.evidence_quotes:
-            st.markdown(f"> {quote}")
-        st.caption(ev.reasoning)
+        meta = ""
+        if comp:
+            meta = f"weight {comp.weight}" + (" · must-have" if comp.must_have else "")
+        ui.evidence_card(ev.competency_name, ev.status, ev.evidence_quotes, ev.reasoning, meta)
 
 
 def render_interview_kit(row, evaluation: CandidateEvaluation, rubric: Rubric,
@@ -197,14 +212,13 @@ def render_interview_kit(row, evaluation: CandidateEvaluation, rubric: Rubric,
     cid = row["id"]
     if row["interview_kit_json"]:
         kit = InterviewKit.model_validate_json(row["interview_kit_json"])
-        st.markdown(f"**Pre-interview brief**\n\n{kit.executive_summary}")
+        ui.summary_card("Pre-interview brief", kit.executive_summary)
         if kit.focus_areas:
-            st.markdown("**Focus areas:** " + " · ".join(f"`{a}`" for a in kit.focus_areas))
-        st.divider()
+            ui.section_label("Focus areas")
+            ui.chips(kit.focus_areas)
+        ui.section_label("Questions", "behavioral — ask about real situations")
         for i, q in enumerate(kit.questions, 1):
-            st.markdown(f"**{i}. {q.question}**")
-            st.caption(f"🎯 {q.competency_name} — {q.rationale}")
-            st.caption(f"👂 Listen for: {q.what_to_listen_for}")
+            ui.question_card(i, q.question, q.competency_name, q.rationale, q.what_to_listen_for)
         label = "🔄 Regenerate interview kit"
     else:
         st.info(
@@ -233,17 +247,14 @@ def render_onboarding(row, evaluation: CandidateEvaluation, rubric: Rubric,
     cid = row["id"]
     if row["onboarding_plan_json"]:
         plan = OnboardingPlan.model_validate_json(row["onboarding_plan_json"])
-        st.markdown(f"**Plan summary**\n\n{plan.summary}")
+        ui.summary_card("Plan summary", plan.summary)
         if plan.ramp_up_priorities:
-            st.markdown("**Ramp-up priorities:** " + " · ".join(f"`{p}`" for p in plan.ramp_up_priorities))
-        st.divider()
+            ui.section_label("Ramp-up priorities", "derived from thin or absent evidence")
+            ui.chips(plan.ramp_up_priorities)
         for phase in plan.phases:
-            st.markdown(f"### {phase.period}")
-            st.caption(phase.focus)
+            ui.section_label(phase.period, phase.focus)
             for m in phase.milestones:
-                st.markdown(f"**{m.title}** — {m.description}")
-                st.caption(f"✅ Success signal: {m.success_signal}")
-            st.write("")
+                ui.milestone_card(m.title, m.description, m.success_signal)
         label = "🔄 Regenerate onboarding plan"
     else:
         st.info(
@@ -356,33 +367,24 @@ def render_candidates_tab(job, rubric: Rubric, provider: LLMProvider) -> None:
         st.info("No candidates evaluated for this job yet.")
         return
 
-    st.subheader("🏆 Ranking")
+    ui.section_label("Ranking", "weighted evidence, computed in code")
     st.caption(
         "The score reflects how much evidence the resume contains for the rubric — "
         "“no evidence” means the resume doesn't mention it, not that the candidate lacks it."
     )
-    ranking = pd.DataFrame(
-        [
-            {
-                "Candidate": r["name"],
-                "Blind": "🕶️" if r["blind"] else "—",
-                "File": r["filename"],
-                "Match": r["score"],
-                "Must-haves without evidence": ", ".join(json.loads(r["missing_must_haves_json"])) or "—",
-            }
-            for r in candidates
-        ]
-    )
-    st.dataframe(
-        ranking,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "Match": st.column_config.ProgressColumn("Match", min_value=0, max_value=100, format="%.1f%%"),
-        },
-    )
+    for rank, row in enumerate(candidates, 1):
+        badges = []
+        if row["blind"]:
+            badges.append(("🕶 blind", "neutral"))
+        missing = json.loads(row["missing_must_haves_json"])
+        badges.append(
+            (f"{len(missing)} must-have gap{'s' if len(missing) > 1 else ''}", "warn")
+            if missing
+            else ("must-haves evidenced", "success")
+        )
+        ui.candidate_row(rank, row["name"], row["score"], badges)
 
-    st.subheader("📄 Candidate reports")
+    ui.section_label("Candidate reports")
     for row in candidates:
         flag = " ⚠️" if json.loads(row["missing_must_haves_json"]) else ""
         with st.expander(f"{row['name']} — {row['score']:.1f}%{flag}"):

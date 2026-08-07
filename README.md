@@ -113,6 +113,19 @@ only contributes judgments, which the UI exposes with quotes for human review.
 Providers implement a single primitive (a schema-constrained completion), so every task
 lives once in `core/tasks.py` and works on any engine.
 
+## Design system
+
+The interface follows a product design pass rather than Streamlit defaults. The
+palette, type scale and radii live in `.streamlit/config.toml`, so Streamlit's own
+widgets inherit them natively; `assets/styles.css` and `views/ui.py` cover the custom
+surfaces — candidate rows with evidence bars, evidence cards, interview questions,
+onboarding milestones.
+
+Color carries meaning here and is used carefully: green for evidence found, amber for
+partial, neutral gray for absent. Absent is deliberately **not** red, and the score bar
+is one brand color at every score — grading candidates green-to-red would read as a
+verdict, when the number only measures how much evidence a résumé happens to contain.
+
 ## Setup
 
 ```bash
@@ -148,11 +161,14 @@ by tests. Several redaction cases come from real failures observed against a loc
 ## Project layout
 
 ```
+.streamlit/config.toml          # Theme: palette, typography, radii
+assets/styles.css               # Component styles beyond the theme's reach
 app.py                          # Router: navigation, engine selection, module dispatch
 views/recruiting.py             # Jobs, rubrics, evaluation, interview kits, emails, onboarding
 views/job_descriptions.py       # Job description generator
 views/competency_matrices.py    # Competency matrix builder
 views/common.py                 # Engine picker and shared UI helpers
+views/ui.py                     # Design-system components (cards, badges, evidence)
 core/models.py                  # Pydantic schemas for every task
 core/prompts.py                 # Prompts, shared across engines
 core/tasks.py                   # Tasks, written once against the provider interface

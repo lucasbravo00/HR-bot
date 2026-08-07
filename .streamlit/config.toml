@@ -1,0 +1,55 @@
+# Design system for the People Ops Copilot.
+# Palette and type scale come from the product design pass; keeping them here
+# (rather than in CSS) means Streamlit's own widgets inherit them natively.
+
+[theme]
+base = "light"
+
+primaryColor = "#4B44E0"
+backgroundColor = "#F5F5F7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#14151A"
+borderColor = "#E6E7EC"
+linkColor = "#4B44E0"
+linkUnderline = false
+
+font = '"Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+headingFont = '"Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+codeFont = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace'
+baseFontSize = 15
+
+baseRadius = "0.7rem"
+buttonRadius = "0.6rem"
+showWidgetBorder = true
+showSidebarBorder = true
+
+# Semantic colors carry meaning in this app: evidence found / partial / neutral.
+greenColor = "#12A06A"
+greenBackgroundColor = "#E6F4EE"
+greenTextColor = "#0E6B4A"
+
+yellowColor = "#D89A2B"
+yellowBackgroundColor = "#FCF3E2"
+yellowTextColor = "#8A6212"
+
+redColor = "#C0453C"
+redBackgroundColor = "#FDF3F2"
+redTextColor = "#8F2C26"
+
+grayColor = "#9AA0AC"
+grayBackgroundColor = "#EFEFF3"
+grayTextColor = "#5A5F6B"
+
+violetColor = "#4B44E0"
+violetBackgroundColor = "#EFEEFD"
+violetTextColor = "#3B34C4"
+
+dataframeBorderColor = "#E6E7EC"
+dataframeHeaderBackgroundColor = "#FAFAFC"
+
+[theme.sidebar]
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#FBFBFD"
+borderColor = "#E6E7EC"
+primaryColor = "#4B44E0"
+textColor = "#14151A"
